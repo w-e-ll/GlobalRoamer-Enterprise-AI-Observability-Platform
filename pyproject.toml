@@ -13,6 +13,7 @@ dependencies = [
     "python-multipart>=0.0.20",
     "structlog>=24.4",
     "psycopg[binary]>=3.2",
+    "prometheus-client>=0.20.0"
 ]
 
 [project.optional-dependencies]

@@ -14,6 +14,7 @@ COPY pyproject.toml README.md ./
 COPY globalroamer_platform ./globalroamer_platform
 COPY migrations ./migrations
 COPY alembic.ini ./
+COPY etc ./etc
 
 RUN pip install --upgrade pip \
     && pip install .

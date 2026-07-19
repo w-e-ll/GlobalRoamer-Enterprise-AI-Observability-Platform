@@ -1,30 +1,36 @@
-# globalroamer_platform/infrastructure/database/models.py
-
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Integer, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
+from sqlalchemy import DateTime, Index, Integer, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from globalroamer_platform.domain.models.processing_status import (
-    ProcessingStatus,
-)
 from globalroamer_platform.infrastructure.database.base import Base
 
 
-class TraceRecord(Base):
+def utc_now() -> datetime:
+    """Return the current timezone-aware UTC datetime."""
+    return datetime.now(timezone.utc)
+
+
+class TraceModel(Base):
+    """SQLAlchemy persistence model for a trace."""
+
     __tablename__ = "traces"
+
     __table_args__ = (
         UniqueConstraint(
             "tenant_id",
             "trace_id",
             name="uq_traces_tenant_trace",
         ),
+        Index("ix_traces_status", "status"),
+        Index("ix_traces_tenant_id", "tenant_id"),
+        Index("ix_traces_testcase_id", "testcase_id"),
+        Index("ix_traces_trace_id", "trace_id"),
     )
 
     id: Mapped[UUID] = mapped_column(
-        PostgresUUID(as_uuid=True),
+        Uuid(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
@@ -32,32 +38,26 @@ class TraceRecord(Base):
     tenant_id: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
-        index=True,
     )
 
     trace_id: Mapped[str] = mapped_column(
         String(128),
         nullable=False,
-        index=True,
     )
 
     testcase_id: Mapped[str] = mapped_column(
         String(128),
         nullable=False,
-        index=True,
     )
 
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        default=ProcessingStatus.RECEIVED.value,
-        index=True,
     )
 
     current_stage: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        default="ingestion",
     )
 
     version: Mapped[int] = mapped_column(
@@ -69,12 +69,12 @@ class TraceRecord(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
+        default=utc_now,
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
     )

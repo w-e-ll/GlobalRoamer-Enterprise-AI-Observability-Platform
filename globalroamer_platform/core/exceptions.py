@@ -1,86 +1,81 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+class GlobalRoamerPlatformError(Exception):
+    """Base exception for all expected platform errors."""
 
 
-class GlobalRoamerAIException(Exception):
+class ConfigurationError(GlobalRoamerPlatformError):
+    """Raised when platform configuration is invalid."""
+
+
+class ApplicationError(GlobalRoamerPlatformError):
+    """Base exception for application use-case failures."""
+
+
+class TraceAlreadyExistsError(ApplicationError):
+    ...
+
+
+class TraceNotFoundError(ApplicationError):
+    ...
+
+
+class ProcessingError(GlobalRoamerPlatformError):
+    """Base exception for trace-processing failures."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        trace_id: str | None = None,
+        stage: str | None = None,
+    ) -> None:
+        self.trace_id = trace_id
+        self.stage = stage
+        super().__init__(message)
+
+
+class TraceLoaderError(ProcessingError):
     pass
 
 
-class ConfigError(GlobalRoamerAIException):
+class TraceParserError(ProcessingError):
     pass
 
 
-class TraceLoaderError(GlobalRoamerAIException):
+class TraceNormalizationError(ProcessingError):
     pass
 
 
-class TraceParserError(GlobalRoamerAIException):
+class TraceChunkingError(ProcessingError):
     pass
 
 
-class ResultLogParserError(GlobalRoamerAIException):
+class EmbeddingGenerationError(ProcessingError):
     pass
 
 
-class ExcelReportParserError(GlobalRoamerAIException):
+class VectorStoreError(ProcessingError):
     pass
 
 
-class EvidenceExtractionError(GlobalRoamerAIException):
+class SimilaritySearchError(ProcessingError):
     pass
 
 
-class EventClassificationError(GlobalRoamerAIException):
+class AISummaryError(ProcessingError):
     pass
 
 
-class IncidentSignatureError(GlobalRoamerAIException):
+class RootCauseAnalysisError(ProcessingError):
     pass
 
 
-class TraceNormalizationError(GlobalRoamerAIException):
+class RetryAdvisorError(ProcessingError):
     pass
 
 
-class TraceChunkingError(GlobalRoamerAIException):
+class CampaignHealthError(ProcessingError):
     pass
 
 
-class EmbeddingGenerationError(GlobalRoamerAIException):
-    pass
-
-
-class VectorStoreError(GlobalRoamerAIException):
-    pass
-
-
-class SimilaritySearchError(GlobalRoamerAIException):
-    pass
-
-
-class AISummaryError(GlobalRoamerAIException):
-    pass
-
-
-class RootCauseAnalysisError(GlobalRoamerAIException):
-    pass
-
-
-class RetryAdvisorError(GlobalRoamerAIException):
-    pass
-
-
-class CampaignHealthError(GlobalRoamerAIException):
-    pass
-
-
-class WorkflowGraphError(GlobalRoamerAIException):
-    pass
-
-
-class TelecomTaxonomyError(GlobalRoamerAIException):
-    pass
-
-
-class ReportGenerationError(GlobalRoamerAIException):
+class ReportGenerationError(ProcessingError):
     pass
