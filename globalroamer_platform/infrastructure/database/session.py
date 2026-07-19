@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from globalroamer_platform.config import get_settings
+from globalroamer_platform.core.config import get_settings
 
 
 settings = get_settings()
