@@ -1,0 +1,74 @@
+env: UAT
+
+paths:
+  base_dir: C:/Users/valen/GlobalRoamer AI Observability Layer
+
+  input_trace_dir: ${base_dir}/var/input/traces
+  input_result_dir: ${base_dir}/var/input/results
+  input_report_dir: ${base_dir}/var/input/reports
+  input_template_dir: ${base_dir}/var/input/templates
+  input_campaign_dir: ${base_dir}/var/input/campaign_metadata
+
+  normalized_dir: ${base_dir}/var/data/normalized_events
+  chunks_dir: ${base_dir}/var/data/chunks
+  embeddings_dir: ${base_dir}/var/data/embeddings
+  vector_db_dir: ${base_dir}/var/data/vector_db
+
+  ai_summary_dir: ${base_dir}/var/output/ai_summaries
+  root_cause_dir: ${base_dir}/var/output/root_cause_reports
+  campaign_health_dir: ${base_dir}/var/output/campaign_health
+
+  log_dir: ${base_dir}/var/log
+
+ai:
+  embedding_model: "text-embedding-3-small"
+
+  llm_model: "gpt-4.1-mini"
+
+  chunk_size: 2000
+  chunk_overlap: 200
+
+vector_db:
+  provider: "chromadb"
+
+  collection_name: "globalroamer_traces"
+
+  persist_directory: "${base_dir}/var/data/vector_db"
+
+processing:
+  supported_trace_extensions:
+    - ".csv"
+    - ".log"
+    - ".txt"
+
+  supported_result_extensions:
+    - ".json"
+    - ".csv"
+    - ".txt"
+
+  save_normalized_json: true
+
+  save_chunks: true
+
+  max_trace_file_size_mb: 200
+
+  max_chunk_count_per_trace: 500
+
+logging:
+  level: "INFO"
+
+  rotation_mb: 20
+
+  backup_count: 10
+
+campaign_health:
+  degraded_threshold: 0.75
+
+  critical_threshold: 0.50
+
+retry_intelligence:
+  min_historical_matches: 3
+
+  low_retry_success_threshold: 0.05
+
+  cooldown_minutes: 30

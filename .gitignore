@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Runtime / generated data
+var/data/
+var/output/
+
+# Temporary traces
+var/input/traces/
+
+# Chroma / vector db
+chroma_db/
+
+# Streamlit cache
+.streamlit/
+
+# Environment
+.env
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# PPT temp
+~$*.pptx
