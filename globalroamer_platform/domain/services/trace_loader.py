@@ -1,264 +1,359 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+# globalroamer_platform/domain/services/trace_loader.py
 
+from __future__ import annotations
+
+import hashlib
 import logging
-import zipfile
-
+import mimetypes
 from pathlib import Path
+from typing import Final
 
-from globalroamer_ai.core.exceptions import TraceLoaderError
-from globalroamer_ai.models.operational_models import SourceArtifact
+from globalroamer_platform.core.exceptions import TraceLoaderError
+from globalroamer_platform.domain.models.source_artifact import (
+    SourceArtifact,
+    SourceArtifactType,
+)
 
-logger = logging.getLogger("trace_loader")
+
+logger = logging.getLogger(__name__)
+
+
+CHECKSUM_BLOCK_SIZE: Final[int] = 1024 * 1024
 
 
 class TraceLoader:
+    """
+    Discover, validate and describe source trace files.
+
+    The loader is responsible for filesystem-level ingestion only.
+    Parsing, normalization and chunking are handled by separate
+    processing services.
+    """
+
     def __init__(
         self,
-        trace_dir: str,
-        result_dir: str,
-        report_dir: str,
-        template_dir: str | None = None,
-    ):
-        self.trace_dir = Path(trace_dir)
-        self.result_dir = Path(result_dir)
-        self.report_dir = Path(report_dir)
-        self.template_dir = Path(template_dir) if template_dir else None
-
-    def discover(self) -> list[SourceArtifact]:
-        logger.info("Discovering testcase artifacts")
-
-        traces = self._discover_traces()
-        results = self._discover_results()
-        reports = self._discover_reports()
-
-        testcase_ids = sorted(traces.keys())
-
-        artifacts = []
-
-        for testcase_id in testcase_ids:
-            artifact = SourceArtifact(
-                testcase_id=testcase_id,
-                trace_path=traces.get(testcase_id),
-                result_path=results.get(testcase_id),
-                report_path=reports.get(testcase_id),
-                template_path=self._discover_template(),
-                template_name=self._guess_template_name(testcase_id),
-                campaign_name=self._guess_campaign_name(testcase_id),
-                report_type="operational_trace",
-                group="globalroamer",
+        *,
+        trace_directory: Path,
+        supported_extensions: list[str],
+        max_file_size_mb: int,
+    ) -> None:
+        if max_file_size_mb <= 0:
+            raise ValueError(
+                "max_file_size_mb must be greater than zero"
             )
 
-            artifacts.append(artifact)
+        normalized_extensions = {
+            self._normalize_extension(extension)
+            for extension in supported_extensions
+        }
+
+        if not normalized_extensions:
+            raise ValueError(
+                "At least one supported trace extension is required"
+            )
+
+        self._trace_directory = (
+            trace_directory
+            .expanduser()
+            .resolve()
+        )
+        self._supported_extensions = frozenset(
+            normalized_extensions
+        )
+        self._max_file_size_bytes = (
+            max_file_size_mb
+            * 1024
+            * 1024
+        )
+
+    @property
+    def trace_directory(self) -> Path:
+        """Return the configured trace input directory."""
+
+        return self._trace_directory
+
+    @property
+    def supported_extensions(self) -> frozenset[str]:
+        """Return normalized supported trace extensions."""
+
+        return self._supported_extensions
+
+    @property
+    def max_file_size_bytes(self) -> int:
+        """Return the configured maximum trace size in bytes."""
+
+        return self._max_file_size_bytes
+
+    def discover_paths(self) -> list[Path]:
+        """
+        Discover supported trace files in the input directory.
+
+        Files are returned in deterministic filename order. This
+        method does not calculate checksums or create artifacts.
+        """
+
+        self._validate_trace_directory()
 
         logger.info(
-            f"Discovered {len(artifacts)} testcase artifacts"
+            "Trace discovery started directory=%s",
+            self._trace_directory,
         )
 
-        return artifacts
-
-    def load_trace_rows(self, trace_path: str) -> list[dict]:
-        path = Path(trace_path)
-
-        if not path.exists():
-            raise TraceLoaderError(
-                f"Trace file not found: {trace_path}"
-            )
-
-        logger.info(f"Loading trace rows: {path.name}")
-
-        rows = []
-
         try:
-            with open(
-                path,
-                "r",
-                encoding="utf-8",
-                errors="replace"
-            ) as f:
-                lines = f.readlines()
-
-            if not lines:
-                return rows
-
-            header = lines[0].strip().split(",")
-
-            for line in lines[1:]:
-                values = line.rstrip("\n").split(",")
-
-                row = {}
-
-                for idx, column in enumerate(header):
-                    row[column] = values[idx] if idx < len(values) else None
-
-                rows.append(row)
-
-            logger.info(
-                f"Loaded {len(rows)} trace rows "
-                f"from {path.name}"
-            )
-
-            return rows
-
-        except Exception as e:
-            logger.error(
-                f"Failed loading trace rows "
-                f"from {path.name}: {e}"
-            )
-
-            raise TraceLoaderError(
-                f"Failed loading trace rows: {path}"
-            )
-
-    def load_result_log(self, result_path: str) -> str:
-        path = Path(result_path)
-
-        if not path.exists():
-            raise TraceLoaderError(
-                f"Result archive not found: {result_path}"
-            )
-
-        logger.info(f"Loading result archive: {path.name}")
-
-        try:
-            with zipfile.ZipFile(path, "r") as zf:
-                candidates = [
-                    name for name in zf.namelist()
-                    if "nodejsLog" in name
-                    or name.endswith(".log")
-                    or name.endswith(".txt")
-                ]
-
-                if not candidates:
-                    return ""
-
-                selected = candidates[0]
-
-                with zf.open(selected) as f:
-                    content = f.read().decode(
-                        "utf-8",
-                        errors="replace"
+            paths = sorted(
+                (
+                    path.resolve()
+                    for path in self._trace_directory.iterdir()
+                    if (
+                        path.is_file()
+                        and path.suffix.lower()
+                        in self._supported_extensions
                     )
-
-                logger.info(
-                    f"Loaded result log "
-                    f"from {selected}"
-                )
-
-                return content
-
-        except Exception as e:
-            logger.error(
-                f"Failed loading result archive "
-                f"{path.name}: {e}"
+                ),
+                key=lambda path: path.name.lower(),
             )
 
+        except OSError as exc:
+            logger.exception(
+                "Trace discovery failed directory=%s",
+                self._trace_directory,
+            )
             raise TraceLoaderError(
-                f"Failed loading result archive: {path}"
-            )
+                "Failed to discover trace files in "
+                f"{self._trace_directory}"
+            ) from exc
 
-    def load_result_archive_entries(
+        logger.info(
+            "Trace discovery completed directory=%s count=%d",
+            self._trace_directory,
+            len(paths),
+        )
+
+        return paths
+
+    def load(
         self,
-        result_path: str
-    ) -> list[str]:
-        path = Path(result_path)
+        source_path: Path,
+        *,
+        tenant_id: str | None = None,
+        trace_id: str | None = None,
+        testcase_id: str | None = None,
+    ) -> SourceArtifact:
+        """
+        Validate a trace source and create immutable artifact metadata.
 
-        if not path.exists():
+        The file content is read only to calculate its SHA-256
+        checksum. Parsing is deliberately delegated to TraceParser.
+        """
+
+        resolved_path = self._resolve_source_path(
+            source_path
+        )
+
+        logger.info(
+            "Trace loading started source_path=%s",
+            resolved_path,
+        )
+
+        try:
+            self._validate_source_file(
+                resolved_path
+            )
+
+            size_bytes = resolved_path.stat().st_size
+            checksum_sha256 = self._calculate_sha256(
+                resolved_path
+            )
+            content_type = self._detect_content_type(
+                resolved_path
+            )
+
+            artifact = SourceArtifact.create(
+                artifact_type=SourceArtifactType.TRACE,
+                source_path=resolved_path,
+                size_bytes=size_bytes,
+                checksum_sha256=checksum_sha256,
+                content_type=content_type,
+                tenant_id=tenant_id,
+                trace_id=trace_id,
+                testcase_id=testcase_id,
+            )
+
+        except TraceLoaderError:
+            raise
+
+        except OSError as exc:
+            logger.exception(
+                "Trace loading failed source_path=%s",
+                resolved_path,
+            )
             raise TraceLoaderError(
-                f"Result archive not found: {result_path}"
+                f"Failed to load trace source: {resolved_path}"
+            ) from exc
+
+        logger.info(
+            "Trace loading completed source_path=%s "
+            "size_bytes=%d checksum_sha256=%s",
+            artifact.source_path,
+            artifact.size_bytes,
+            artifact.checksum_sha256,
+        )
+
+        return artifact
+
+    def load_discovered(
+        self,
+        *,
+        tenant_id: str | None = None,
+    ) -> list[SourceArtifact]:
+        """
+        Discover and load every supported trace in the directory.
+
+        A failure in one source stops the operation. Batch-level
+        partial-failure handling belongs in an application workflow.
+        """
+
+        return [
+            self.load(
+                source_path,
+                tenant_id=tenant_id,
+            )
+            for source_path in self.discover_paths()
+        ]
+
+    def _validate_trace_directory(self) -> None:
+        if not self._trace_directory.exists():
+            raise TraceLoaderError(
+                "Trace input directory does not exist: "
+                f"{self._trace_directory}"
+            )
+
+        if not self._trace_directory.is_dir():
+            raise TraceLoaderError(
+                "Configured trace input path is not a directory: "
+                f"{self._trace_directory}"
+            )
+
+    def _resolve_source_path(
+        self,
+        source_path: Path,
+    ) -> Path:
+        candidate = source_path.expanduser()
+
+        if not candidate.is_absolute():
+            candidate = (
+                self._trace_directory
+                / candidate
+            )
+
+        resolved_path = candidate.resolve()
+
+        try:
+            resolved_path.relative_to(
+                self._trace_directory
+            )
+        except ValueError as exc:
+            raise TraceLoaderError(
+                "Trace source must be located inside the configured "
+                f"trace directory: {resolved_path}"
+            ) from exc
+
+        return resolved_path
+
+    def _validate_source_file(
+        self,
+        source_path: Path,
+    ) -> None:
+        if not source_path.exists():
+            raise TraceLoaderError(
+                f"Trace file was not found: {source_path}"
+            )
+
+        if not source_path.is_file():
+            raise TraceLoaderError(
+                f"Trace source is not a file: {source_path}"
+            )
+
+        extension = source_path.suffix.lower()
+
+        if extension not in self._supported_extensions:
+            supported = ", ".join(
+                sorted(self._supported_extensions)
+            )
+            raise TraceLoaderError(
+                f"Unsupported trace extension '{extension}' "
+                f"for {source_path.name}. "
+                f"Supported extensions: {supported}"
             )
 
         try:
-            with zipfile.ZipFile(path, "r") as zf:
-                return zf.namelist()
-
-        except Exception as e:
-            logger.error(
-                f"Failed reading archive entries "
-                f"{path.name}: {e}"
-            )
-
+            size_bytes = source_path.stat().st_size
+        except OSError as exc:
             raise TraceLoaderError(
-                f"Failed reading archive entries: {path}"
+                f"Cannot read trace metadata: {source_path}"
+            ) from exc
+
+        if size_bytes == 0:
+            raise TraceLoaderError(
+                f"Trace file is empty: {source_path}"
             )
 
-    def _discover_traces(self) -> dict[str, str]:
-        traces = {}
+        if size_bytes > self._max_file_size_bytes:
+            raise TraceLoaderError(
+                f"Trace file exceeds the configured size limit: "
+                f"{source_path} "
+                f"size_bytes={size_bytes} "
+                f"limit_bytes={self._max_file_size_bytes}"
+            )
 
-        for path in self.trace_dir.glob("*.csv"):
-            testcase_id = self._extract_testcase_id(path.name)
+    @staticmethod
+    def _calculate_sha256(
+        source_path: Path,
+    ) -> str:
+        digest = hashlib.sha256()
 
-            traces[testcase_id] = str(path)
+        try:
+            with source_path.open("rb") as source_file:
+                while block := source_file.read(
+                    CHECKSUM_BLOCK_SIZE
+                ):
+                    digest.update(block)
 
-        return traces
+        except OSError as exc:
+            raise TraceLoaderError(
+                f"Cannot read trace file: {source_path}"
+            ) from exc
 
-    def _discover_results(self) -> dict[str, str]:
-        results = {}
+        return digest.hexdigest()
 
-        for path in self.result_dir.glob("*.zip"):
-            testcase_id = self._extract_testcase_id(path.name)
-            results[testcase_id] = str(path)
-
-        return results
-
-    def _discover_reports(self) -> dict[str, str]:
-        reports = {}
-
-        if not self.report_dir:
-            return reports
-
-        for path in self.report_dir.glob("*.xlsx"):
-            testcase_id = self._extract_testcase_id(path.name)
-
-            reports[testcase_id] = str(path)
-
-        return reports
-
-    def _discover_template(self) -> str | None:
-        if not self.template_dir:
-            return None
-
-        templates = list(
-            self.template_dir.glob("*.xlsx")
+    @staticmethod
+    def _detect_content_type(
+        source_path: Path,
+    ) -> str | None:
+        content_type, _ = mimetypes.guess_type(
+            source_path.name
         )
 
-        if not templates:
-            return None
-
-        return str(templates[0])
+        return content_type
 
     @staticmethod
-    def _extract_testcase_id(filename: str) -> str:
-        import re
-
-        match = re.search(r"(?:trace|result)[_-](\d{9})", filename, re.IGNORECASE)
-        if match:
-            return match.group(1)
-
-        match = re.search(r"_(\d{9})_", filename)
-        if match:
-            return match.group(1)
-
-        match = re.search(r"(\d{9})", filename)
-        if match:
-            return match.group(1)
-
-        return filename
-
-    @staticmethod
-    def _guess_template_name(
-        testcase_id: str
+    def _normalize_extension(
+        extension: str,
     ) -> str:
-        if testcase_id.startswith("350"):
-            return "IR38_3_3_1"
+        normalized_extension = (
+            extension
+            .strip()
+            .lower()
+        )
 
-        return "UNKNOWN"
+        if not normalized_extension:
+            raise ValueError(
+                "Supported trace extension must not be empty"
+            )
 
-    @staticmethod
-    def _guess_campaign_name(
-        testcase_id: str
-    ) -> str:
-        if testcase_id.startswith("350"):
-            return "GSMA_IR38"
+        if not normalized_extension.startswith("."):
+            raise ValueError(
+                "Supported trace extension must start with '.'"
+            )
 
-        return "GLOBALROAMER"
+        return normalized_extension
