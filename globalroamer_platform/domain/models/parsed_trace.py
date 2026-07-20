@@ -18,6 +18,9 @@ from globalroamer_platform.domain.models.parsed_evidence import (
     ParsedEvidence,
 )
 from globalroamer_platform.domain.models.raw_trace import RawTrace
+from globalroamer_platform.domain.models.source_artifact import (
+    SourceArtifact,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,7 +198,7 @@ class ParsedTrace:
         )
 
     @property
-    def source(self) -> str:
+    def source(self) -> SourceArtifact:
         return self.raw_trace.source
 
     @property
@@ -392,7 +395,9 @@ class ParsedTrace:
         )
 
         return {
-            "source": self.source,
+            "source": _serialize_source_artifact(
+                self.raw_trace.source,
+            ),
             "raw_trace": raw_trace_data,
             "extracted_values": (
                 self.extracted_values.to_dict()
@@ -453,7 +458,9 @@ class ParsedTrace:
         include_rows: bool,
     ) -> dict[str, Any]:
         result: dict[str, Any] = {
-            "source": self.raw_trace.source,
+            "source": _serialize_source_artifact(
+                self.raw_trace.source
+            ),
             "delimiter": self.raw_trace.delimiter,
             "encoding": self.raw_trace.encoding,
             "parser_warnings": list(
@@ -472,6 +479,25 @@ class ParsedTrace:
 
         return result
 
+def _serialize_source_artifact(
+    source: Any,
+) -> dict[str, Any]:
+    return {
+        "id": str(source.id),
+        "artifact_type": source.artifact_type.value,
+        "source_path": str(source.source_path),
+        "filename": source.filename,
+        "extension": source.extension,
+        "size_bytes": source.size_bytes,
+        "checksum_sha256": source.checksum_sha256,
+        "loaded_at": _serialize_value(
+            source.loaded_at,
+        ),
+        "content_type": source.content_type,
+        "tenant_id": source.tenant_id,
+        "trace_id": source.trace_id,
+        "testcase_id": source.testcase_id,
+    }
 
 def _serialize_raw_row(
     row: Any,

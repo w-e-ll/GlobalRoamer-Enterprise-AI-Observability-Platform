@@ -15,6 +15,7 @@ COPY globalroamer_platform ./globalroamer_platform
 COPY migrations ./migrations
 COPY alembic.ini ./
 COPY etc ./etc
+COPY scripts ./scripts
 
 RUN pip install --upgrade pip \
     && pip install .

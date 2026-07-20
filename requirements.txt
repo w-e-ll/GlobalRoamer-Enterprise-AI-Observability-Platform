@@ -38,3 +38,5 @@ opentelemetry-instrumentation-httpx>=0.48b0
 opentelemetry-instrumentation-sqlalchemy>=0.48b0
 
 PyYAML>=6.0,<7.0
+
+psycopg[binary]>=3.2
