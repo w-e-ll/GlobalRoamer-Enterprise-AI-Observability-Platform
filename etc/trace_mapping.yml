@@ -1,0 +1,65 @@
+version: "1.0"
+
+description: >
+  Mapping configuration for GlobalRoamer telecom trace parsing.
+
+mappings:
+  - target_name: imsi
+    operation: copy
+    source_type: extracted_value
+    source_name: IMSI
+    value_type: string
+    required: false
+    strip_value: true
+    description: Subscriber IMSI extracted from trace content
+
+  - target_name: mcc
+    operation: copy
+    source_type: extracted_value
+    source_name: MCC
+    value_type: string
+    required: false
+    strip_value: true
+    description: Mobile Country Code
+
+  - target_name: call_id
+    operation: copy
+    source_type: raw_field
+    source_name: CallId
+    value_type: string
+    required: false
+    duplicate_strategy: first
+    strip_value: true
+    description: First call identifier found in the trace
+
+  - target_name: first_event
+    operation: copy
+    source_type: event
+    value_type: string
+    required: false
+    duplicate_strategy: first
+    strip_value: true
+    description: First event in the trace
+
+  - target_name: trace_status
+    operation: lookup
+    source_type: extracted_value
+    source_name: Status
+    value_type: string
+    required: false
+    case_sensitive: false
+    lookup_values:
+      success: successful
+      succeeded: successful
+      passed: successful
+      failure: failed
+      failed: failed
+      error: failed
+    description: Normalized trace execution status
+
+  - target_name: platform
+    operation: constant
+    constant_value: globalroamer
+    value_type: string
+    required: true
+    description: Source platform identifier

@@ -1,0 +1,4 @@
+Timestamp;CallId;Ptc;Event;Type;Information
+2026-07-20 10:15:00.000;call-001;NAS;Attach Request;Mobility;IMSI=206010123456789 MCC=206
+2026-07-20 10:15:01.500;call-001;NAS;Authentication;Security;Authentication started
+2026-07-20 10:15:04.000;call-001;NAS;Attach Reject;Failure;Registration failed because of authentication timeout

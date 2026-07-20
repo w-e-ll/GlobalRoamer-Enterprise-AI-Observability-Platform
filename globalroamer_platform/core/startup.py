@@ -14,6 +14,14 @@ from globalroamer_platform.core.config import (
 )
 from globalroamer_platform.core.exceptions import ConfigurationError
 
+from globalroamer_platform.bootstrap.settings import (
+    build_trace_parsing_settings,
+)
+from globalroamer_platform.bootstrap.trace_parsing import (
+    build_trace_parsing_container,
+    validate_trace_parsing_configuration,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +50,22 @@ INSECURE_PASSWORDS = {
     "password",
     "postgres",
 }
+
+
+def build_application_state(settings: Settings):
+    trace_parsing_settings = build_trace_parsing_settings(
+        settings
+    )
+
+    trace_parsing = build_trace_parsing_container(
+        settings=trace_parsing_settings
+    )
+
+    validate_trace_parsing_configuration(
+        trace_parsing
+    )
+
+    return trace_parsing
 
 
 def validate_startup_configuration(

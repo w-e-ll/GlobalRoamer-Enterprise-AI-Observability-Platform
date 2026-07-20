@@ -215,6 +215,15 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    trace_mapping_configuration_path: str = (
+        "etc/trace_mapping.yml"
+    )
+    trace_source_timezone: str = "UTC"
+    trace_target_timezone: str = "UTC"
+    trace_naive_datetime_strategy: str = (
+        "assume_source_timezone"
+    )
+
     app_name: str = (
         "GlobalRoamer Enterprise AI Observability Platform"
     )
