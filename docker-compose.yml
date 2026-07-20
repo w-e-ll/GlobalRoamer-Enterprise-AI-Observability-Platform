@@ -19,7 +19,8 @@ services:
       timeout: 5s
       retries: 10
       start_period: 5s
-
+    ports:
+      - "5432:5432"
   migration:
     build:
       context: .
@@ -36,6 +37,24 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
+
+  outbox-worker:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: globalroamer-outbox-worker
+    env_file:
+      - .env
+    command:
+      python -m globalroamer_platform.workers.run_outbox_worker
+    volumes:
+      - ./globalroamer_platform:/app/globalroamer_platform
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    restart: unless-stopped
 
   api:
     build:

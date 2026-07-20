@@ -11,6 +11,9 @@ from globalroamer_platform.api.middleware.request_logging import (
 from globalroamer_platform.api.routes.health import (
     router as health_router,
 )
+from globalroamer_platform.api.routes.trace_processing import (
+    router as trace_processing_router,
+)
 from globalroamer_platform.api.routes.traces import (
     router as traces_router,
 )
@@ -106,6 +109,10 @@ app.include_router(
 app.include_router(
     traces_router,
     prefix="/api/v1",
+)
+
+app.include_router(
+    trace_processing_router,
 )
 
 
