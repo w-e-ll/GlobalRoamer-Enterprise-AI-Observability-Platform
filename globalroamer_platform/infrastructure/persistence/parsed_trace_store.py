@@ -10,6 +10,9 @@ from globalroamer_platform.domain.models.parsed_trace import ParsedTrace
 from globalroamer_platform.infrastructure.models.parsed_trace import (
     ParsedTraceModel,
 )
+from globalroamer_platform.infrastructure.persistence.parsed_trace_mapper import (
+    ParsedTraceMapper,
+)
 
 
 class ParsedTraceStore:
@@ -65,6 +68,28 @@ class ParsedTraceStore:
         return await self._get_model(
             tenant_id=tenant_id,
             trace_id=trace_id,
+        )
+    async def get_domain(
+        self,
+        *,
+        tenant_id: str,
+        trace_id: str,
+    ) -> ParsedTrace | None:
+        """
+        Load and reconstruct a persisted ParsedTrace aggregate.
+
+        Returns None when no snapshot exists for the supplied identity.
+        """
+        model = await self._get_model(
+            tenant_id=tenant_id,
+            trace_id=trace_id,
+        )
+
+        if model is None:
+            return None
+
+        return ParsedTraceMapper.from_dict(
+            model.parsed_trace_json
         )
 
     async def exists(
@@ -162,7 +187,7 @@ class ParsedTraceStore:
             parsed_trace,
         )
 
-        payload = parsed_trace.to_dict()
+        payload = parsed_trace.to_dict(include_raw_rows=True,)
 
         return {
             "tenant_id": tenant_id,

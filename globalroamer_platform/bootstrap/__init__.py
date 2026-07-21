@@ -5,9 +5,13 @@ from globalroamer_platform.bootstrap.trace_processing import (
 from globalroamer_platform.bootstrap.parser_worker import (
     build_parser_worker,
 )
+from globalroamer_platform.bootstrap.normalizer_worker import (
+    build_normalizer_worker,
+)
 
 __all__ = [
     "build_process_trace",
     "build_trace_loader",
     "build_parser_worker",
+    "build_normalizer_worker",
 ]

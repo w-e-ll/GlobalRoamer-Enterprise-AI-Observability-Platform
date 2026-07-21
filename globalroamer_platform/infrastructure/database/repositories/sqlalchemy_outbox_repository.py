@@ -73,12 +73,16 @@ class SQLAlchemyOutboxRepository(OutboxRepository):
         return self._to_entity(model)
 
     async def list_available(
-        self,
-        *,
-        available_before: datetime,
-        limit: int = 100,
+            self,
+            *,
+            available_before: datetime,
+            limit: int = 100,
     ) -> list[OutboxMessage]:
-        """Return pending messages ready for publication."""
+        """Return and lock pending messages ready for publication.
+
+        PostgreSQL ``FOR UPDATE SKIP LOCKED`` prevents concurrent outbox
+        workers from selecting and publishing the same messages.
+        """
         if limit <= 0:
             raise ValueError("limit must be greater than zero")
 
@@ -94,6 +98,7 @@ class SQLAlchemyOutboxRepository(OutboxRepository):
                 OutboxMessageModel.created_at.asc(),
                 OutboxMessageModel.id.asc(),
             )
+            .with_for_update(skip_locked=True)
             .limit(limit)
         )
 

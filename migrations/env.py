@@ -5,7 +5,7 @@ from sqlalchemy import engine_from_config, pool
 
 from globalroamer_platform.core.config import get_settings
 from globalroamer_platform.infrastructure.database.base import Base
-from globalroamer_platform.infrastructure.database import models  # noqa: F401
+from globalroamer_platform.infrastructure import models  # noqa: F401
 
 
 config = context.config

@@ -11,8 +11,12 @@ from sqlalchemy import String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
+from sqlalchemy import UniqueConstraint
 
 from globalroamer_platform.infrastructure.database.base import Base
+from globalroamer_platform.infrastructure.database.models import (
+    utc_now,
+)
 
 
 class ParsedTraceModel(Base):
@@ -24,6 +28,14 @@ class ParsedTraceModel(Base):
     """
 
     __tablename__ = "parsed_traces"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "trace_id",
+            name="uq_parsed_traces_tenant_trace",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -119,15 +131,15 @@ class ParsedTraceModel(Base):
         nullable=False,
     )
 
-    created_at: Mapped[datetime] = mapped_column(
+    created_at = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
+        default=utc_now,
         nullable=False,
     )
 
-    updated_at: Mapped[datetime] = mapped_column(
+    updated_at = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
         nullable=False,
     )
