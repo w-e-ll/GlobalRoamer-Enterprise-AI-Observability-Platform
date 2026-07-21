@@ -5,10 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Protocol
 
 from globalroamer_platform.application.outbox.publish_pending_outbox_messages import (
-    PublishPendingOutboxMessages,
     PublishPendingOutboxMessagesCommand,
     PublishPendingOutboxMessagesResult,
 )
@@ -17,6 +16,17 @@ logger = logging.getLogger(__name__)
 
 
 AsyncCallback = Callable[[], Awaitable[None]]
+
+
+class OutboxBatchPublisher(Protocol):
+    """Publish one transactional outbox batch."""
+
+    async def execute(
+        self,
+        command: PublishPendingOutboxMessagesCommand,
+    ) -> PublishPendingOutboxMessagesResult:
+        """Execute one publication batch."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,7 +66,7 @@ class OutboxWorker:
     def __init__(
         self,
         *,
-        publisher: PublishPendingOutboxMessages,
+        publisher: OutboxBatchPublisher,
         settings: OutboxWorkerSettings | None = None,
         commit: AsyncCallback | None = None,
         rollback: AsyncCallback | None = None,

@@ -17,6 +17,9 @@ from globalroamer_platform.api.routes.trace_processing import (
 from globalroamer_platform.api.routes.traces import (
     router as traces_router,
 )
+from globalroamer_platform.bootstrap.runtime import (
+    build_application_runtime,
+)
 from globalroamer_platform.core.config import (
     get_platform_config,
     get_settings,
@@ -26,7 +29,11 @@ from globalroamer_platform.core.startup import (
     validate_startup_configuration,
 )
 from globalroamer_platform.infrastructure.database.session import (
+    async_session_factory,
     engine,
+)
+from globalroamer_platform.infrastructure.messaging.in_memory_event_publisher import (
+    InMemoryEventPublisher,
 )
 from globalroamer_platform.telemetry.instrumentation import (
     configure_instrumentation,
@@ -67,6 +74,14 @@ tracing_state = configure_tracing(
 )
 
 
+event_publisher = InMemoryEventPublisher()
+
+application_runtime = build_application_runtime(
+    session_factory=async_session_factory,
+    event_publisher=event_publisher,
+)
+
+
 @asynccontextmanager
 async def lifespan(
     _app: FastAPI,
@@ -74,22 +89,24 @@ async def lifespan(
     """
     Manage application startup and shutdown.
 
-    Startup validates operational configuration before accepting
-    traffic. Shutdown removes instrumentation and flushes pending
-    OpenTelemetry spans.
+    Startup validates operational configuration and starts managed
+    background workers before accepting traffic. Shutdown stops workers
+    gracefully, releases database resources, and flushes telemetry.
     """
+    validate_startup_configuration(
+        settings=settings,
+        platform_config=platform_config,
+    )
+
+    await application_runtime.start()
 
     try:
-        validate_startup_configuration(
-            settings=settings,
-            platform_config=platform_config,
-        )
-
         yield
-
     finally:
+        await application_runtime.stop()
         shutdown_instrumentation()
         shutdown_tracing()
+        await engine.dispose()
 
 
 app = FastAPI(
