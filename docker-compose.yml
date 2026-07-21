@@ -20,7 +20,7 @@ services:
       retries: 10
       start_period: 5s
     ports:
-      - "5432:5432"
+      - "5434:5432"
   migration:
     build:
       context: .
@@ -71,6 +71,7 @@ services:
       - ./globalroamer_platform:/app/globalroamer_platform
       - ./migrations:/app/migrations
       - ./alembic.ini:/app/alembic.ini
+      - ./tests:/app/tests
     depends_on:
       postgres:
         condition: service_healthy

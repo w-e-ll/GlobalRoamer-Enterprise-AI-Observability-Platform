@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from globalroamer_platform.core.config import get_settings
 
@@ -24,9 +25,9 @@ logger.info(
 engine = create_async_engine(
     settings.database_url,
     pool_pre_ping=True,
+    poolclass=NullPool,
     echo=False,
 )
-
 async_session_factory = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,

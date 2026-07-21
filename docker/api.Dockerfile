@@ -18,7 +18,7 @@ COPY etc ./etc
 COPY scripts ./scripts
 
 RUN pip install --upgrade pip \
-    && pip install .
+    && pip install ".[dev]"
 
 EXPOSE 8000
 
