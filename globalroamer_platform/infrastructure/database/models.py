@@ -1,10 +1,15 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Index, Integer, String, UniqueConstraint, Uuid
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from globalroamer_platform.infrastructure.database.base import Base
+
+from sqlalchemy.dialects.postgresql import (
+    JSONB,
+    UUID as PostgreSQLUUID,
+)
 
 
 def utc_now() -> datetime:
@@ -78,3 +83,142 @@ class TraceModel(Base):
         default=utc_now,
         onupdate=utc_now,
     )
+
+
+class TraceChunkModel(Base):
+    """
+    SQLAlchemy persistence model for an immutable TraceChunk.
+
+    Domain tuples are stored as PostgreSQL JSONB arrays. Conversion between
+    this persistence representation and the TraceChunk domain model belongs
+    in TraceChunkMapper.
+    """
+
+    __tablename__ = "trace_chunks"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "trace_id",
+            "chunk_index",
+            name="uq_trace_chunks_tenant_trace_index",
+        ),
+        Index(
+            "ix_trace_chunks_tenant_trace",
+            "tenant_id",
+            "trace_id",
+        ),
+        Index(
+            "ix_trace_chunks_content_hash",
+            "content_hash",
+        ),
+        Index(
+            "ix_trace_chunks_created_at",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        primary_key=True,
+        nullable=False,
+    )
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+    trace_id: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+    )
+
+    testcase_id: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+    )
+
+    chunk_index: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    text: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    event_ids: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+    )
+
+    event_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    event_names: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+    )
+
+    event_families: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+    )
+
+    severities: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+    )
+
+    causes: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+    )
+
+    tags: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+    )
+
+    has_failure: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    has_high_severity: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    has_retry_recommended: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    content_hash: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            "TraceChunkModel("
+            f"id={self.id!r}, "
+            f"tenant_id={self.tenant_id!r}, "
+            f"trace_id={self.trace_id!r}, "
+            f"chunk_index={self.chunk_index!r}, "
+            f"event_count={self.event_count!r}"
+            ")"
+        )
