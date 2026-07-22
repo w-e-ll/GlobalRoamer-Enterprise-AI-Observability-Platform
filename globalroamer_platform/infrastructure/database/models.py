@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID
+from sqlalchemy import Float
 
 from globalroamer_platform.infrastructure.database.base import Base
 
@@ -222,3 +224,92 @@ class TraceChunkModel(Base):
             f"event_count={self.event_count!r}"
             ")"
         )
+
+
+class EmbeddingRecordModel(Base):
+    """Persisted vector embedding generated from one trace chunk."""
+
+    __tablename__ = "embedding_records"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "chunk_id",
+            "model_name",
+            "model_version",
+            name=(
+                "uq_embedding_records_"
+                "tenant_chunk_model_version"
+            ),
+        ),
+        Index(
+            "ix_embedding_records_tenant_trace",
+            "tenant_id",
+            "trace_id",
+        ),
+        Index(
+            "ix_embedding_records_tenant_chunk",
+            "tenant_id",
+            "chunk_id",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        nullable=False,
+    )
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    trace_id: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    testcase_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    chunk_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "trace_chunks.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+
+    model_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    model_version: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    dimensions: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    embedding: Mapped[list[float]] = mapped_column(
+        ARRAY(Float),
+        nullable=False,
+    )
+
+    content_checksum: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
