@@ -23,6 +23,9 @@ from globalroamer_platform.infrastructure.persistence.embedding_record_store imp
 from globalroamer_platform.infrastructure.persistence.trace_chunk_store import (
     TraceChunkStore,
 )
+from globalroamer_platform.runtime.session_scoped_event_handler import (
+    EventHandlerFactory,
+)
 from globalroamer_platform.workers.embedding_worker import (
     EmbeddingWorker,
 )
@@ -95,3 +98,25 @@ def build_embedding_worker(
         embed_trace_chunks=embed_trace_chunks,
         outbox_repository=outbox_repository,
     )
+
+
+def build_embedding_handler_factory(
+    *,
+    embedding_provider: EmbeddingProvider,
+) -> EventHandlerFactory:
+    """
+    Build a session-aware EmbeddingWorker factory.
+
+    SessionScopedEventHandler invokes the returned factory once per
+    dispatched event, supplying the transaction-bound AsyncSession.
+    """
+
+    def factory(
+        session: AsyncSession,
+    ) -> EmbeddingWorker:
+        return build_embedding_worker(
+            session=session,
+            embedding_provider=embedding_provider,
+        )
+
+    return factory

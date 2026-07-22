@@ -1,14 +1,14 @@
-"""Bootstrap wiring for the normalizer worker."""
+"""Bootstrap wiring for the chunk worker."""
 
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from globalroamer_platform.application.traces.normalize_trace import (
-    NormalizeTrace,
+from globalroamer_platform.application.traces.chunk_trace import (
+    ChunkTrace,
 )
-from globalroamer_platform.domain.services.trace_normalizer import (
-    TraceNormalizer,
+from globalroamer_platform.domain.services.trace_chunker import (
+    TraceChunker,
 )
 from globalroamer_platform.infrastructure.database.repositories.sqlalchemy_outbox_repository import (
     SQLAlchemyOutboxRepository,
@@ -16,43 +16,46 @@ from globalroamer_platform.infrastructure.database.repositories.sqlalchemy_outbo
 from globalroamer_platform.infrastructure.persistence.operational_event_store import (
     OperationalEventStore,
 )
-from globalroamer_platform.infrastructure.persistence.parsed_trace_store import (
-    ParsedTraceStore,
+from globalroamer_platform.infrastructure.persistence.trace_chunk_store import (
+    TraceChunkStore,
 )
-from globalroamer_platform.workers.normalizer_worker import (
-    NormalizerWorker,
+from globalroamer_platform.runtime.session_scoped_event_handler import (
+    EventHandlerFactory,
+)
+from globalroamer_platform.workers.chunk_worker import (
+    ChunkWorker,
 )
 
 
-def build_normalizer_worker(
+def build_chunk_worker(
     *,
     session: AsyncSession,
-) -> NormalizerWorker:
+) -> ChunkWorker:
     """
-    Build the complete normalizer worker dependency graph.
+    Build the complete chunk worker dependency graph.
 
     The same AsyncSession is shared by:
 
-    - ParsedTraceStore
     - OperationalEventStore
+    - TraceChunkStore
     - SQLAlchemyOutboxRepository
 
-    This allows operational events and the outgoing transactional
-    outbox message to participate in the same transaction owned by
-    the outer runtime.
+    This allows replacement trace chunks and the outgoing transactional
+    outbox message to participate in the same transaction owned by the
+    outer runtime.
     """
 
-    trace_normalizer = TraceNormalizer()
+    trace_chunker = TraceChunker()
 
-    normalize_trace = NormalizeTrace(
-        trace_normalizer=trace_normalizer,
-    )
-
-    parsed_trace_store = ParsedTraceStore(
-        session=session,
+    chunk_trace = ChunkTrace(
+        trace_chunker=trace_chunker,
     )
 
     operational_event_store = OperationalEventStore(
+        session=session,
+    )
+
+    trace_chunk_store = TraceChunkStore(
         session=session,
     )
 
@@ -60,9 +63,27 @@ def build_normalizer_worker(
         session=session,
     )
 
-    return NormalizerWorker(
-        normalize_trace=normalize_trace,
-        parsed_trace_store=parsed_trace_store,
+    return ChunkWorker(
+        chunk_trace=chunk_trace,
         operational_event_store=operational_event_store,
+        trace_chunk_store=trace_chunk_store,
         outbox_repository=outbox_repository,
     )
+
+
+def build_chunk_handler_factory() -> EventHandlerFactory:
+    """
+    Build a session-aware ChunkWorker factory.
+
+    SessionScopedEventHandler invokes the returned factory once per
+    dispatched event, supplying the transaction-bound AsyncSession.
+    """
+
+    def factory(
+        session: AsyncSession,
+    ) -> ChunkWorker:
+        return build_chunk_worker(
+            session=session,
+        )
+
+    return factory
