@@ -19,6 +19,9 @@ from globalroamer_platform.infrastructure.persistence.operational_event_store im
 from globalroamer_platform.infrastructure.persistence.trace_chunk_store import (
     TraceChunkStore,
 )
+from globalroamer_platform.runtime.session_scoped_event_handler import (
+    EventHandlerFactory,
+)
 from globalroamer_platform.workers.chunk_worker import (
     ChunkWorker,
 )
@@ -41,7 +44,6 @@ def build_chunk_worker(
     outbox message to participate in the same transaction owned by the
     outer runtime.
     """
-
     trace_chunker = TraceChunker()
 
     chunk_trace = ChunkTrace(
@@ -66,3 +68,21 @@ def build_chunk_worker(
         trace_chunk_store=trace_chunk_store,
         outbox_repository=outbox_repository,
     )
+
+
+def build_chunk_handler_factory() -> EventHandlerFactory:
+    """
+    Build a session-aware ChunkWorker factory.
+
+    SessionScopedEventHandler invokes the returned factory once per
+    dispatched event, supplying the transaction-bound AsyncSession.
+    """
+
+    def factory(
+        session: AsyncSession,
+    ) -> ChunkWorker:
+        return build_chunk_worker(
+            session=session,
+        )
+
+    return factory

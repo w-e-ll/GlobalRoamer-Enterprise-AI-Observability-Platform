@@ -87,6 +87,110 @@ class TraceModel(Base):
     )
 
 
+class SourceArtifactModel(Base):
+    """
+    SQLAlchemy persistence model for an immutable trace source artifact.
+
+    Represents the physical artifact received by the platform before parsing.
+    Domain conversion belongs in the artifact repository mapper.
+    """
+
+    __tablename__ = "source_artifacts"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "artifact_hash",
+            name="uq_source_artifacts_tenant_hash",
+        ),
+        Index(
+            "ix_source_artifacts_tenant_id",
+            "tenant_id",
+        ),
+        Index(
+            "ix_source_artifacts_trace_id",
+            "trace_id",
+        ),
+        Index(
+            "ix_source_artifacts_status",
+            "status",
+        ),
+        Index(
+            "ix_source_artifacts_created_at",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+    trace_id: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+    )
+
+    testcase_id: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+    )
+
+    filename: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    storage_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    storage_key: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+    )
+
+    content_type: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    size_bytes: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    artifact_hash: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+
 class TraceChunkModel(Base):
     """
     SQLAlchemy persistence model for an immutable TraceChunk.

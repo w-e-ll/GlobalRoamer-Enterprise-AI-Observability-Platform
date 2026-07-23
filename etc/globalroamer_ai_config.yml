@@ -17,7 +17,7 @@ paths:
   log_dir: ${base_dir}/var/log
 
 ai:
-  embedding_model: "text-embedding-3-small"
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
   llm_model: "gpt-4.1-mini"
   chunk_size: 2000
   chunk_overlap: 200

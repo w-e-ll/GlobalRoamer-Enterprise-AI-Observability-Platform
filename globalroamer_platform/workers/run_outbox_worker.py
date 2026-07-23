@@ -21,6 +21,7 @@ from globalroamer_platform.workers.outbox_worker import (
     OutboxWorkerSettings,
 )
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -34,6 +35,7 @@ def _request_shutdown(
         "Outbox worker shutdown requested signal=%s",
         signal_name,
     )
+
     worker.stop()
 
 
@@ -82,33 +84,32 @@ async def run() -> None:
         initial_retry_delay_seconds=5.0,
     )
 
-    async with async_session_factory() as session:
-        worker = build_outbox_worker(
-            session=session,
-            event_publisher=event_publisher,
-            settings=settings,
+    worker = build_outbox_worker(
+        session_factory=async_session_factory,
+        event_publisher=event_publisher,
+        settings=settings,
+    )
+
+    loop = asyncio.get_running_loop()
+
+    _register_signal_handlers(
+        loop=loop,
+        worker=worker,
+    )
+
+    try:
+        await worker.run_forever()
+    except asyncio.CancelledError:
+        logger.info(
+            "Outbox worker runtime cancelled",
         )
+        raise
+    finally:
+        worker.stop()
 
-        loop = asyncio.get_running_loop()
-
-        _register_signal_handlers(
-            loop=loop,
-            worker=worker,
+        logger.info(
+            "Transactional outbox worker runtime stopped",
         )
-
-        try:
-            await worker.run_forever()
-        except asyncio.CancelledError:
-            logger.info(
-                "Outbox worker runtime cancelled",
-            )
-            raise
-        finally:
-            worker.stop()
-
-            logger.info(
-                "Transactional outbox worker runtime stopped",
-            )
 
 
 def main() -> None:
