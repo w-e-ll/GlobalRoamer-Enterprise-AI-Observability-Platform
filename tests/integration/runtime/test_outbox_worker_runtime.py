@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -25,8 +26,11 @@ from globalroamer_platform.infrastructure.database.repositories.sqlalchemy_outbo
 from globalroamer_platform.infrastructure.database.session import (
     async_session_factory,
 )
-from globalroamer_platform.infrastructure.messaging.in_memory_event_publisher import (
-    InMemoryEventPublisher,
+from globalroamer_platform.runtime.event_dispatcher import (
+    EventDispatcher,
+)
+from globalroamer_platform.runtime.event_runtime import (
+    EventRuntime,
 )
 from globalroamer_platform.workers.outbox_worker import (
     OutboxWorkerSettings,
@@ -35,6 +39,7 @@ from globalroamer_platform.workers.outbox_worker import (
 
 async def persist_pending_message() -> OutboxMessage:
     """Persist one immediately available outbox message."""
+
     event = EventEnvelope(
         event_id=uuid4(),
         event_type="trace.parsed",
@@ -56,7 +61,10 @@ async def persist_pending_message() -> OutboxMessage:
     )
 
     async with async_session_factory() as session:
-        repository = SQLAlchemyOutboxRepository(session)
+        repository = SQLAlchemyOutboxRepository(
+            session,
+        )
+
         await repository.add(message)
         await session.commit()
 
@@ -67,11 +75,18 @@ async def load_message(
     message_id: UUID,
 ) -> OutboxMessage:
     """Reload an outbox message in a fresh database session."""
+
     async with async_session_factory() as session:
-        repository = SQLAlchemyOutboxRepository(session)
-        message = await repository.get_by_id(message_id)
+        repository = SQLAlchemyOutboxRepository(
+            session,
+        )
+
+        message = await repository.get_by_id(
+            message_id,
+        )
 
     assert message is not None
+
     return message
 
 
@@ -82,6 +97,7 @@ async def wait_until(
     interval_seconds: float = 0.01,
 ) -> None:
     """Wait until an asynchronous predicate becomes true."""
+
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout_seconds
 
@@ -89,10 +105,13 @@ async def wait_until(
         if await predicate():
             return
 
-        await asyncio.sleep(interval_seconds)
+        await asyncio.sleep(
+            interval_seconds,
+        )
 
     raise TimeoutError(
-        f"condition was not met within {timeout_seconds} seconds"
+        "condition was not met within "
+        f"{timeout_seconds} seconds"
     )
 
 
@@ -103,19 +122,30 @@ async def test_outbox_runtime_publishes_and_commits_pending_message() -> None:
 
     This verifies the full production path:
 
-    ApplicationRuntime
-        -> OutboxWorker
-        -> SessionScopedOutboxPublisher
-        -> PublishPendingOutboxMessages
-        -> SQLAlchemyOutboxRepository
-        -> commit
+        ApplicationRuntime
+            -> OutboxWorker
+            -> SessionScopedOutboxPublisher
+            -> PublishPendingOutboxMessages
+            -> SQLAlchemyOutboxRepository
+            -> EventRuntime
+            -> EventDispatcher
+            -> commit
     """
+
     message = await persist_pending_message()
-    event_publisher = InMemoryEventPublisher()
+
+    dispatcher = AsyncMock(
+        spec=EventDispatcher,
+    )
+    dispatcher.dispatch.return_value = ()
+
+    event_runtime = EventRuntime(
+        dispatcher=dispatcher,
+    )
 
     runtime = build_application_runtime(
         session_factory=async_session_factory,
-        event_publisher=event_publisher,
+        event_runtime=event_runtime,
         outbox_settings=OutboxWorkerSettings(
             poll_interval_seconds=0.01,
             batch_size=100,
@@ -126,14 +156,20 @@ async def test_outbox_runtime_publishes_and_commits_pending_message() -> None:
     )
 
     async def message_was_published() -> bool:
-        stored_message = await load_message(message.id)
+        stored_message = await load_message(
+            message.id,
+        )
+
+        dispatched_event_ids = {
+            call.args[0].event_id
+            for call in dispatcher.dispatch.await_args_list
+        }
 
         return (
-            stored_message.status == OutboxMessageStatus.PUBLISHED
-            and any(
-                event.event_id == message.event_id
-                for event in event_publisher.events
-            )
+            stored_message.status
+            == OutboxMessageStatus.PUBLISHED
+            and message.event_id
+            in dispatched_event_ids
         )
 
     await runtime.start()
@@ -146,19 +182,50 @@ async def test_outbox_runtime_publishes_and_commits_pending_message() -> None:
     finally:
         await runtime.stop()
 
-    stored_message = await load_message(message.id)
+    stored_message = await load_message(
+        message.id,
+    )
 
-    assert stored_message.status == OutboxMessageStatus.PUBLISHED
+    assert (
+        stored_message.status
+        == OutboxMessageStatus.PUBLISHED
+    )
     assert stored_message.attempt_count == 1
     assert stored_message.published_at is not None
     assert stored_message.last_attempt_at is not None
     assert stored_message.last_error is None
 
-    published_event_ids = {
+    dispatched_events = [
+        call.args[0]
+        for call in dispatcher.dispatch.await_args_list
+    ]
+
+    dispatched_event_ids = {
         event.event_id
-        for event in event_publisher.events
+        for event in dispatched_events
     }
 
-    assert message.event_id in published_event_ids
+    assert message.event_id in dispatched_event_ids
+
+    published_event = next(
+        event
+        for event in dispatched_events
+        if event.event_id == message.event_id
+    )
+
+    assert published_event == message.event
+    assert published_event.event_type == "trace.parsed"
+    assert (
+        published_event.correlation_id
+        == message.event.correlation_id
+    )
+    assert (
+        published_event.tenant_id
+        == message.event.tenant_id
+    )
+
+    assert event_runtime.is_running is False
+    assert event_runtime.pending_event_count == 0
+
     assert runtime.is_started is False
     assert runtime.is_stopping is False

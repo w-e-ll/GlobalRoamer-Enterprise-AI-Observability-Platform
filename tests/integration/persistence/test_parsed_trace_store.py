@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,17 +8,14 @@ import pytest
 from globalroamer_platform.bootstrap.parser_worker import (
     build_parser_worker,
 )
-from globalroamer_platform.domain.events.event_envelope import (
-    EventEnvelope,
-)
-from globalroamer_platform.domain.events.event_types import (
-    TRACE_ARTIFACT_RECEIVED,
-)
 from globalroamer_platform.infrastructure.database.session import (
     async_session_factory,
 )
 from globalroamer_platform.infrastructure.persistence.parsed_trace_store import (
     ParsedTraceStore,
+)
+from tests.integration.helpers.artifacts import (
+    create_persisted_test_artifact,
 )
 
 
@@ -28,21 +24,49 @@ TRACE_MAPPING = Path("etc/trace_mapping.yml")
 
 
 @pytest.mark.asyncio
-async def test_get_domain_reconstructs_persisted_parsed_trace() -> None:
+async def test_get_domain_reconstructs_persisted_parsed_trace(
+    tmp_path: Path,
+) -> None:
     """
     ParsedTrace survives a persistence round trip.
 
-    The parser worker creates and persists the aggregate. A new database
-    session then reloads it through ParsedTraceStore.get_domain().
+    The test persists a source artifact through the same storage and
+    repository contract used by production. The parser worker processes the
+    resulting TRACE_ARTIFACT_RECEIVED event and persists the ParsedTrace
+    aggregate. A new database session then reloads the aggregate through
+    ParsedTraceStore.get_domain().
     """
+
     tenant_id = f"parsed-trace-store-{uuid4()}"
     trace_id = f"parsed-trace-{uuid4()}"
     testcase_id = "TC-ROUNDTRIP-001"
 
+    artifact_storage_directory = (
+        tmp_path
+        / "artifacts"
+    )
+
     async with async_session_factory() as session:
+        persisted_artifact = (
+            await create_persisted_test_artifact(
+                session=session,
+                source_path=SAMPLE_TRACE,
+                storage_directory=(
+                    artifact_storage_directory
+                ),
+                tenant_id=tenant_id,
+                trace_id=trace_id,
+                testcase_id=testcase_id,
+                correlation_id=str(uuid4()),
+                producer="pytest.integration",
+            )
+        )
+
         worker = build_parser_worker(
             session=session,
-            trace_directory=SAMPLE_TRACE.parent,
+            trace_directory=(
+                artifact_storage_directory
+            ),
             mapping_configuration_path=TRACE_MAPPING,
             source_timezone="UTC",
             target_timezone="UTC",
@@ -52,42 +76,41 @@ async def test_get_domain_reconstructs_persisted_parsed_trace() -> None:
             max_file_size_mb=100,
         )
 
-        incoming_event = EventEnvelope(
-            event_id=uuid4(),
-            event_type=TRACE_ARTIFACT_RECEIVED,
-            event_version=1,
-            correlation_id=str(uuid4()),
-            causation_id=None,
-            tenant_id=tenant_id,
-            occurred_at=datetime.now(timezone.utc),
-            producer="pytest",
-            payload={
-                "source_path": SAMPLE_TRACE.name,
-                "trace_id": trace_id,
-                "testcase_id": testcase_id,
-            },
+        outgoing_event = await worker.handle(
+            persisted_artifact.event,
         )
 
-        await worker.handle(incoming_event)
         await session.commit()
 
     async with async_session_factory() as session:
-        store = ParsedTraceStore(session)
+        store = ParsedTraceStore(
+            session,
+        )
 
         loaded = await store.get_domain(
             tenant_id=tenant_id,
             trace_id=trace_id,
         )
 
+    assert outgoing_event.payload["artifact_id"] == str(
+        persisted_artifact.artifact.artifact_id,
+    )
+
     assert loaded is not None
 
     assert loaded.metadata["tenant_id"] == tenant_id
     assert loaded.metadata["trace_id"] == trace_id
-    assert loaded.metadata["testcase_id"] == testcase_id
+    assert (
+        loaded.metadata["testcase_id"]
+        == testcase_id
+    )
 
     assert loaded.source.tenant_id == tenant_id
     assert loaded.source.trace_id == trace_id
-    assert loaded.source.testcase_id == testcase_id
+    assert (
+        loaded.source.testcase_id
+        == testcase_id
+    )
 
     assert loaded.row_count == 3
     assert len(loaded.raw_trace.rows) == 3

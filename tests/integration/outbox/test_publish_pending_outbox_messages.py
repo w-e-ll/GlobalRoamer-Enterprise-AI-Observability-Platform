@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from globalroamer_platform.application.outbox.publish_pending_outbox_messages import (
     PublishPendingOutboxMessages,
@@ -15,7 +16,9 @@ from globalroamer_platform.domain.entities.outbox_message import (
     OutboxMessage,
     OutboxMessageStatus,
 )
-from globalroamer_platform.domain.events.event_envelope import EventEnvelope
+from globalroamer_platform.domain.events.event_envelope import (
+    EventEnvelope,
+)
 from globalroamer_platform.infrastructure.database.repositories.sqlalchemy_outbox_repository import (
     SQLAlchemyOutboxRepository,
 )
@@ -96,6 +99,44 @@ def create_event(
     )
 
 
+def create_message(
+    *,
+    tenant_id: str,
+    trace_id: str,
+    available_at: datetime = TEST_AVAILABLE_AT,
+) -> OutboxMessage:
+    """Create one pending outbox message without persisting it."""
+
+    return OutboxMessage.create(
+        event=create_event(
+            tenant_id=tenant_id,
+            trace_id=trace_id,
+        ),
+        available_at=available_at,
+    )
+
+
+async def add_message(
+    *,
+    session: AsyncSession,
+    tenant_id: str,
+    trace_id: str,
+    available_at: datetime = TEST_AVAILABLE_AT,
+) -> OutboxMessage:
+    """Add one pending outbox message to the supplied transaction."""
+
+    message = create_message(
+        tenant_id=tenant_id,
+        trace_id=trace_id,
+        available_at=available_at,
+    )
+
+    repository = SQLAlchemyOutboxRepository(session)
+    await repository.add(message)
+
+    return message
+
+
 async def persist_message(
     *,
     tenant_id: str,
@@ -104,25 +145,21 @@ async def persist_message(
 ) -> OutboxMessage:
     """Persist and commit one pending outbox message."""
 
-    message = OutboxMessage.create(
-        event=create_event(
+    async with async_session_factory() as session:
+        message = await add_message(
+            session=session,
             tenant_id=tenant_id,
             trace_id=trace_id,
-        ),
-        available_at=available_at,
-    )
+            available_at=available_at,
+        )
 
-    async with async_session_factory() as session:
-        repository = SQLAlchemyOutboxRepository(session)
-
-        await repository.add(message)
         await session.commit()
 
     return message
 
 
 async def load_message(
-    message_id,
+    message_id: UUID,
 ) -> OutboxMessage:
     """Reload an outbox message using a new database session."""
 
@@ -292,24 +329,23 @@ async def test_respects_outbox_batch_size() -> None:
     """Only the configured number of available messages is processed."""
 
     tenant_id = f"publish-batch-{uuid4()}"
-
-    messages = []
-
-    for index in range(3):
-        message = await persist_message(
-            tenant_id=tenant_id,
-            trace_id=f"trace-{index}-{uuid4()}",
-            available_at=(
-                TEST_AVAILABLE_AT
-                + timedelta(microseconds=index)
-            ),
-        )
-        messages.append(message)
-
     event_publisher = RecordingEventPublisher()
 
     async with async_session_factory() as session:
         repository = SQLAlchemyOutboxRepository(session)
+
+        messages = [
+            await add_message(
+                session=session,
+                tenant_id=tenant_id,
+                trace_id=f"trace-{index}-{uuid4()}",
+                available_at=(
+                    TEST_AVAILABLE_AT
+                    + timedelta(microseconds=index)
+                ),
+            )
+            for index in range(3)
+        ]
 
         service = PublishPendingOutboxMessages(
             repository=repository,
@@ -353,10 +389,19 @@ async def test_respects_outbox_batch_size() -> None:
     assert len(published_messages) == 2
     assert len(pending_messages) == 1
 
+    assert {
+        event.event_id
+        for event in event_publisher.published_events
+    } == {
+        message.event_id
+        for message in messages[:2]
+    }
+
     assert all(
         message.attempt_count == 1
         for message in published_messages
     )
 
+    assert pending_messages[0].id == messages[2].id
     assert pending_messages[0].attempt_count == 0
     assert pending_messages[0].published_at is None

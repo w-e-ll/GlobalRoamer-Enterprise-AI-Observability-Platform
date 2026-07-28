@@ -20,6 +20,8 @@ class PathSettings(BaseModel):
     input_template_dir: Path
     input_campaign_dir: Path
 
+    artifact_storage_dir: Path
+
     normalized_dir: Path
     chunks_dir: Path
     embeddings_dir: Path

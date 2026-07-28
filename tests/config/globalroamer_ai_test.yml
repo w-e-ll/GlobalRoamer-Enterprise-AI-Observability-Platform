@@ -9,6 +9,8 @@ paths:
   input_template_dir: ${base_dir}/input/templates
   input_campaign_dir: ${base_dir}/input/campaign_metadata
 
+  artifact_storage_dir: /app/.test-runtime/artifacts
+
   normalized_dir: ${base_dir}/data/normalized_events
   chunks_dir: ${base_dir}/data/chunks
   embeddings_dir: ${base_dir}/data/embeddings

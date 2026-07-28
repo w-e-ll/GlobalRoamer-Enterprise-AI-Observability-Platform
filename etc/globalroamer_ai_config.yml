@@ -7,6 +7,7 @@ paths:
   input_report_dir: ${base_dir}/var/input/reports
   input_template_dir: ${base_dir}/var/input/templates
   input_campaign_dir: ${base_dir}/var/input/campaign_metadata
+  artifact_storage_dir: ${base_dir}/var/artifacts
   normalized_dir: ${base_dir}/var/data/normalized_events
   chunks_dir: ${base_dir}/var/data/chunks
   embeddings_dir: ${base_dir}/var/data/embeddings
