@@ -3,8 +3,9 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID
-from sqlalchemy import Float
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+
+from pgvector.sqlalchemy import Vector
 
 from globalroamer_platform.infrastructure.database.base import Base
 
@@ -404,7 +405,7 @@ class EmbeddingRecordModel(Base):
     )
 
     embedding: Mapped[list[float]] = mapped_column(
-        ARRAY(Float),
+        Vector(),
         nullable=False,
     )
 

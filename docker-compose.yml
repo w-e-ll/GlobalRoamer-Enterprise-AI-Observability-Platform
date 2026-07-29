@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17
+    image: pgvector/pgvector:pg17
     container_name: globalroamer-postgres
     restart: unless-stopped
     environment:
@@ -38,23 +38,23 @@ services:
         condition: service_healthy
     restart: "no"
 
-  outbox-worker:
-    build:
-      context: .
-      dockerfile: docker/api.Dockerfile
-    container_name: globalroamer-outbox-worker
-    env_file:
-      - .env
-    command:
-      python -m globalroamer_platform.workers.run_outbox_worker
-    volumes:
-      - ./globalroamer_platform:/app/globalroamer_platform
-    depends_on:
-      postgres:
-        condition: service_healthy
-      migration:
-        condition: service_completed_successfully
-    restart: unless-stopped
+#  outbox-worker:
+#    build:
+#      context: .
+#      dockerfile: docker/api.Dockerfile
+#    container_name: globalroamer-outbox-worker
+#    env_file:
+#      - .env
+#    command:
+#      python -m globalroamer_platform.workers.run_outbox_worker
+#    volumes:
+#      - ./globalroamer_platform:/app/globalroamer_platform
+#    depends_on:
+#      postgres:
+#        condition: service_healthy
+#      migration:
+#        condition: service_completed_successfully
+#    restart: unless-stopped
 
   api:
     build:
