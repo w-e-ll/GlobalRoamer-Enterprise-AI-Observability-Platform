@@ -234,6 +234,36 @@ class Settings(BaseSettings):
     database_url: str
     alembic_database_url: str
 
+    kafka_bootstrap_servers: str = "kafka:9092"
+
+    kafka_client_id: str = (
+        "globalroamer-platform"
+    )
+
+    kafka_integration_events_topic: str = (
+        "globalroamer.integration-events.v1"
+    )
+
+    kafka_dead_letter_topic: str = (
+        "globalroamer.integration-events.dlq.v1"
+    )
+
+    kafka_consumer_group_id: str = (
+        "globalroamer.pipeline-workers.v1"
+    )
+
+    kafka_auto_offset_reset: Literal[
+        "earliest",
+        "latest",
+        "none",
+    ] = "earliest"
+
+    kafka_request_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        le=300,
+    )
+
     config_file: Path = Path(
         "etc/globalroamer_ai_config.yml"
     )
